@@ -4,7 +4,7 @@
         <div class="container mx-auto px-4">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div>
-                    <h3 class="text-xl font-bold mb-4">Learning Management System</h3>
+                    <h3 class="text-xl font-bold mb-4">LEARNHUB</h3>
                     <p class="text-green-200">Empowering education through technology, making learning more accessible, interactive, and effective.</p>
                 </div>
                 
@@ -31,12 +31,12 @@
                 <div>
                     <h3 class="text-xl font-bold mb-4">Contact</h3>
                     <p class="text-green-200 mb-2">If you need assistance or have any questions, feel free to contact our support team.</p>
-                    <a href="mailto:support@lms.com" class="text-white hover:text-green-200 transition-colors duration-300">support@lms.com</a>
+                    <a href="mailto:support@learnhub.com" class="text-white hover:text-green-200 transition-colors duration-300">support@learnhub.com</a>
                 </div>
             </div>
             
             <div class="border-t border-green-700 mt-8 pt-8 text-center text-green-200">
-                <p>&copy; <?php echo date('Y'); ?> Learning Management System. All rights reserved.</p>
+                <p>&copy; <?php echo date('Y'); ?> LEARNHUB. All rights reserved.</p>
             </div>
         </div>
     </footer>

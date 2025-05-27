@@ -121,14 +121,10 @@ $current_page = basename($_SERVER['PHP_SELF']);
     <header class="bg-primary-gradient shadow-md">
         <div class="container mx-auto px-4 py-3">
             <div class="flex justify-between items-center">
-                <a href="index.php" class="text-white font-bold text-xl flex items-center">
-                    <!-- Education Icon SVG -->
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14V9" />
-                    </svg>
-                    Learning System
+                <a href="index.php" class="text-white font-bold text-xl flex items-center hover-scale">
+                    <!-- Logo Image -->
+                    <img src="logo.png" alt="LearnHub Logo" class="h-10 w-10 mr-3 rounded-lg shadow-sm">
+                    LEARNHUB
                 </a>
                 
                 <nav>
