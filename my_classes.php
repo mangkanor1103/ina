@@ -97,9 +97,9 @@ $classrooms = $result->fetch_all(MYSQLI_ASSOC);
                             <span class="font-medium">Teacher:</span> <?php echo htmlspecialchars($classroom['teacher_name']); ?>
                         </p>
                         
-                        <div class="h-24 overflow-hidden text-gray-600 text-sm mb-4">
+                        <div class="h-20 overflow-hidden text-gray-600 text-sm mb-4">
                             <?php if (!empty($classroom['description'])): ?>
-                                <p><?php echo nl2br(htmlspecialchars(substr($classroom['description'], 0, 150))); ?><?php echo (strlen($classroom['description']) > 150) ? '...' : ''; ?></p>
+                                <p><?php echo nl2br(htmlspecialchars(substr($classroom['description'], 0, 120))); ?><?php echo (strlen($classroom['description']) > 120) ? '...' : ''; ?></p>
                             <?php else: ?>
                                 <p class="text-gray-500 italic">No description provided.</p>
                             <?php endif; ?>
@@ -124,43 +124,139 @@ $classrooms = $result->fetch_all(MYSQLI_ASSOC);
                         $stmt->execute();
                         $result = $stmt->get_result();
                         $pending_submissions = $result->fetch_assoc()['count'];
+                        
+                        // Get quiz information for this classroom
+                        $quiz_table_exists = $conn->query("SHOW TABLES LIKE 'quizzes'")->num_rows > 0;
+                        $total_quizzes = 0;
+                        $available_quizzes = 0;
+                        $completed_quizzes = 0;
+                        $pending_quizzes = 0;
+                        
+                        if ($quiz_table_exists) {
+                            // Get total quizzes count
+                            $stmt = $conn->prepare("SELECT COUNT(*) as count FROM quizzes WHERE classroom_id = ?");
+                            $stmt->bind_param("i", $classroom['id']);
+                            $stmt->execute();
+                            $result = $stmt->get_result();
+                            $total_quizzes = $result->fetch_assoc()['count'];
+                            
+                            // Get available quizzes (published status)
+                            $stmt = $conn->prepare("
+                                SELECT COUNT(*) as count FROM quizzes 
+                                WHERE classroom_id = ? AND status IN ('published', 'active', 'open')
+                            ");
+                            $stmt->bind_param("i", $classroom['id']);
+                            $stmt->execute();
+                            $result = $stmt->get_result();
+                            $available_quizzes = $result->fetch_assoc()['count'];
+                            
+                            // Get completed quiz attempts
+                            $quiz_attempts_table_exists = $conn->query("SHOW TABLES LIKE 'quiz_attempts'")->num_rows > 0;
+                            if ($quiz_attempts_table_exists) {
+                                $stmt = $conn->prepare("
+                                    SELECT COUNT(DISTINCT qa.quiz_id) as count 
+                                    FROM quiz_attempts qa
+                                    JOIN quizzes q ON qa.quiz_id = q.id
+                                    WHERE q.classroom_id = ? AND qa.user_id = ? AND qa.status = 'submitted'
+                                ");
+                                $stmt->bind_param("ii", $classroom['id'], $user_id);
+                                $stmt->execute();
+                                $result = $stmt->get_result();
+                                $completed_quizzes = $result->fetch_assoc()['count'];
+                            }
+                            
+                            $pending_quizzes = $available_quizzes - $completed_quizzes;
+                            if ($pending_quizzes < 0) $pending_quizzes = 0;
+                        }
                         ?>
                         
-                        <div class="flex space-x-4 text-sm text-gray-500 mb-4">
+                        <div class="grid grid-cols-2 gap-2 text-sm text-gray-500 mb-4">
                             <div class="flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                                 </svg>
                                 <?php echo $lesson_count; ?> Lessons
                             </div>
                             
+                            <div class="flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                </svg>
+                                <?php echo $total_quizzes; ?> Quizzes
+                            </div>
+                            
                             <?php if ($pending_submissions > 0): ?>
                                 <div class="flex items-center text-amber-600">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
-                                    <?php echo $pending_submissions; ?> Pending
+                                    <?php echo $pending_submissions; ?> Due
+                                </div>
+                            <?php endif; ?>
+                            
+                            <?php if ($pending_quizzes > 0): ?>
+                                <div class="flex items-center text-purple-600">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <?php echo $pending_quizzes; ?> Quiz<?php echo $pending_quizzes > 1 ? 'es' : ''; ?>
                                 </div>
                             <?php endif; ?>
                         </div>
                         
-                        <div class="flex flex-col sm:flex-row sm:items-center justify-between space-y-2 sm:space-y-0">
+                        <!-- Quiz Progress Bar (if quizzes exist) -->
+                        <?php if ($total_quizzes > 0): ?>
+                            <div class="mb-4">
+                                <div class="flex justify-between text-xs text-gray-600 mb-1">
+                                    <span>Quiz Progress</span>
+                                    <span><?php echo $completed_quizzes; ?>/<?php echo $available_quizzes; ?> completed</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <?php 
+                                    $quiz_progress = $available_quizzes > 0 ? ($completed_quizzes / $available_quizzes) * 100 : 0;
+                                    ?>
+                                    <div class="bg-purple-600 h-2 rounded-full transition-all duration-300" style="width: <?php echo $quiz_progress; ?>%"></div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <div class="flex flex-col space-y-2">
                             <a href="view_classroom.php?id=<?php echo $classroom['id']; ?>" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center justify-center transition-all duration-300 transform hover:scale-[1.02]">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                 </svg>
                                 View Classroom
                             </a>
                             
-                            <?php if ($pending_submissions > 0): ?>
-                                <span class="bg-amber-100 text-amber-800 text-xs font-medium px-2.5 py-1.5 rounded-full flex items-center justify-center">
+                            <?php if ($available_quizzes > 0): ?>
+                                <a href="classroom_quizzes.php?classroom_id=<?php echo $classroom['id']; ?>" class="bg-purple-100 hover:bg-purple-200 text-purple-800 px-4 py-2 rounded-md flex items-center justify-center transition-all duration-300 transform hover:scale-[1.02] text-sm">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
-                                    Assignments Due
-                                </span>
+                                    View Quizzes (<?php echo $available_quizzes; ?>)
+                                </a>
                             <?php endif; ?>
+                            
+                            <div class="flex flex-wrap gap-1 justify-center">
+                                <?php if ($pending_submissions > 0): ?>
+                                    <span class="bg-amber-100 text-amber-800 text-xs font-medium px-2 py-1 rounded-full flex items-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                        </svg>
+                                        <?php echo $pending_submissions; ?> Due
+                                    </span>
+                                <?php endif; ?>
+                                
+                                <?php if ($pending_quizzes > 0): ?>
+                                    <span class="bg-purple-100 text-purple-800 text-xs font-medium px-2 py-1 rounded-full flex items-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <?php echo $pending_quizzes; ?> Quiz<?php echo $pending_quizzes > 1 ? 'es' : ''; ?>
+                                    </span>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -170,7 +266,7 @@ $classrooms = $result->fetch_all(MYSQLI_ASSOC);
         <!-- Quick Stats -->
         <div class="mt-12 bg-white rounded-lg shadow-md p-6 animate__animated animate__fadeIn" style="animation-delay: 0.6s;">
             <h2 class="text-xl font-bold mb-4 text-green-800">Your Progress at a Glance</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <?php
                 // Get total lessons across all enrolled classrooms
                 $stmt = $conn->prepare("
@@ -206,25 +302,72 @@ $classrooms = $result->fetch_all(MYSQLI_ASSOC);
                 $result = $stmt->get_result();
                 $total_assignments = $result->fetch_assoc()['count'];
                 
+                // Get total quizzes across all enrolled classrooms
+                $total_all_quizzes = 0;
+                $completed_all_quizzes = 0;
+                if ($quiz_table_exists && $quiz_attempts_table_exists) {
+                    $stmt = $conn->prepare("
+                        SELECT COUNT(*) as count FROM quizzes 
+                        WHERE classroom_id IN (
+                            SELECT classroom_id FROM classroom_students WHERE student_id = ?
+                        ) AND status IN ('published', 'active', 'open')
+                    ");
+                    $stmt->bind_param("i", $user_id);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $total_all_quizzes = $result->fetch_assoc()['count'];
+                    
+                    $stmt = $conn->prepare("
+                        SELECT COUNT(DISTINCT qa.quiz_id) as count 
+                        FROM quiz_attempts qa
+                        JOIN quizzes q ON qa.quiz_id = q.id
+                        WHERE q.classroom_id IN (
+                            SELECT classroom_id FROM classroom_students WHERE student_id = ?
+                        ) AND qa.user_id = ? AND qa.status = 'submitted'
+                    ");
+                    $stmt->bind_param("ii", $user_id, $user_id);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $completed_all_quizzes = $result->fetch_assoc()['count'];
+                }
+                
                 // Calculate completion percentage
                 $completion_percentage = ($total_assignments > 0) ? round(($completed_assignments / $total_assignments) * 100) : 0;
+                $quiz_completion_percentage = ($total_all_quizzes > 0) ? round(($completed_all_quizzes / $total_all_quizzes) * 100) : 0;
                 ?>
                 
                 <div class="bg-green-50 p-4 rounded-lg">
-                    <div class="text-4xl font-bold text-green-600 mb-2"><?php echo count($classrooms); ?></div>
-                    <div class="text-gray-600">Enrolled Classes</div>
+                    <div class="text-3xl font-bold text-green-600 mb-2"><?php echo count($classrooms); ?></div>
+                    <div class="text-gray-600 text-sm">Enrolled Classes</div>
                 </div>
                 
                 <div class="bg-blue-50 p-4 rounded-lg">
-                    <div class="text-4xl font-bold text-blue-600 mb-2"><?php echo $total_lessons; ?></div>
-                    <div class="text-gray-600">Total Lessons</div>
+                    <div class="text-3xl font-bold text-blue-600 mb-2"><?php echo $total_lessons; ?></div>
+                    <div class="text-gray-600 text-sm">Total Lessons</div>
                 </div>
                 
                 <div class="bg-purple-50 p-4 rounded-lg">
-                    <div class="text-4xl font-bold text-purple-600 mb-2"><?php echo $completion_percentage; ?>%</div>
-                    <div class="text-gray-600">Completion Rate</div>
+                    <div class="text-3xl font-bold text-purple-600 mb-2"><?php echo $total_all_quizzes; ?></div>
+                    <div class="text-gray-600 text-sm">Available Quizzes</div>
+                </div>
+                
+                <div class="bg-amber-50 p-4 rounded-lg">
+                    <div class="text-3xl font-bold text-amber-600 mb-2"><?php echo $completion_percentage; ?>%</div>
+                    <div class="text-gray-600 text-sm">Assignment Progress</div>
                 </div>
             </div>
+            
+            <?php if ($total_all_quizzes > 0): ?>
+                <div class="mt-4 p-4 bg-gray-50 rounded-lg">
+                    <div class="flex justify-between text-sm text-gray-600 mb-2">
+                        <span>Quiz Completion Progress</span>
+                        <span><?php echo $completed_all_quizzes; ?>/<?php echo $total_all_quizzes; ?> completed</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-3">
+                        <div class="bg-purple-600 h-3 rounded-full transition-all duration-300" style="width: <?php echo $quiz_completion_percentage; ?>%"></div>
+                    </div>
+                </div>
+            <?php endif; ?>
         </div>
     <?php endif; ?>
 
@@ -363,13 +506,19 @@ $classrooms = $result->fetch_all(MYSQLI_ASSOC);
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 flex-shrink-0 mt-0.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                 </svg>
-                Regularly check your classes for new assignments and learning materials.
+                Regularly check your classes for new assignments and quizzes.
             </li>
             <li class="flex items-start">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 flex-shrink-0 mt-0.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                 </svg>
-                Complete your assignments on time to maintain a good learning pace.
+                Complete quizzes and assignments on time to maintain good progress.
+            </li>
+            <li class="flex items-start">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 flex-shrink-0 mt-0.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                Review your quiz results to understand areas for improvement.
             </li>
             <li class="flex items-start">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 flex-shrink-0 mt-0.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
