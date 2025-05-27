@@ -44,8 +44,8 @@ if (!is_admin() && $classroom['teacher_id'] != $user_id) {
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $title = clean_input($_POST['title']);
-    $description = clean_input($_POST['description']);
-    $content = isset($_POST['content']) ? $_POST['content'] : '';
+    $content = clean_input($_POST['content']);
+    $deadline = !empty($_POST['deadline']) ? clean_input($_POST['deadline']) : null;
     
     $errors = [];
     
@@ -85,13 +85,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $table_exists = $conn->query("SHOW TABLES LIKE 'lessons'")->num_rows > 0;
             
             if (!$table_exists) {
-                // Create the lessons table with necessary columns
+                // Create the lessons table with deadline column included
                 $create_table_sql = "CREATE TABLE lessons (
                     id INT(11) NOT NULL AUTO_INCREMENT,
                     classroom_id INT(11) NOT NULL,
                     title VARCHAR(255) NOT NULL,
                     description TEXT,
                     content TEXT,
+                    deadline DATETIME NULL,
                     file_path VARCHAR(255),
                     created_at DATETIME NOT NULL,
                     updated_at DATETIME,
@@ -109,6 +110,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $check_file_path = $conn->query("SHOW COLUMNS FROM lessons LIKE 'file_path'");
             $file_path_exists = ($check_file_path->num_rows > 0);
             
+            $check_deadline = $conn->query("SHOW COLUMNS FROM lessons LIKE 'deadline'");
+            $deadline_exists = ($check_deadline->num_rows > 0);
+            
             // If content column doesn't exist, add it
             if (!$content_exists) {
                 $conn->query("ALTER TABLE lessons ADD COLUMN content TEXT AFTER description");
@@ -121,9 +125,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $file_path_exists = true;
             }
             
+            // If deadline column doesn't exist, add it
+            if (!$deadline_exists) {
+                $conn->query("ALTER TABLE lessons ADD COLUMN deadline DATETIME NULL AFTER content");
+                $deadline_exists = true;
+            }
+            
             // Now build the query using the columns we've ensured exist
-            $stmt = $conn->prepare("INSERT INTO lessons (classroom_id, title, description, content, file_path, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
-            $stmt->bind_param("issss", $classroom_id, $title, $description, $content, $file_path);
+            $stmt = $conn->prepare("INSERT INTO lessons (classroom_id, title, description, content, deadline, file_path, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())");
+            $stmt->bind_param("isssss", $classroom_id, $title, $description, $content, $deadline, $file_path);
             
             if ($stmt->execute()) {
                 $lesson_id = $conn->insert_id;
@@ -178,6 +188,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <textarea id="content" name="content" rows="10" 
                       class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"><?php echo isset($content) ? htmlspecialchars($content) : ''; ?></textarea>
             <p class="text-sm text-gray-500 mt-1">The main content of your lesson. You can include detailed instructions, explanations, and assignment details.</p>
+        </div>
+        
+        <div class="mb-4">
+            <label for="deadline" class="block text-sm font-medium text-gray-700 mb-2">
+                Submission Deadline
+            </label>
+            <input type="datetime-local" id="deadline" name="deadline" 
+                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                   value="<?php echo isset($_POST['deadline']) ? $_POST['deadline'] : ''; ?>">
+            <p class="text-sm text-gray-500 mt-1">Leave empty for no deadline</p>
         </div>
         
         <div class="mb-6">

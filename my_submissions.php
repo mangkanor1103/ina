@@ -54,7 +54,7 @@ $stmt = $conn->prepare("
     JOIN classroom_students cs ON c.id = cs.classroom_id
     LEFT JOIN submissions s ON l.id = s.lesson_id AND s.student_id = ?
     WHERE cs.student_id = ? AND s.id IS NULL
-    ORDER BY l.created_at DESC
+    ORDER BY l.deadline ASC, l.created_at DESC
 ");
 $stmt->bind_param("ii", $user_id, $user_id);
 $stmt->execute();
@@ -167,7 +167,10 @@ $completion_rate = $total_submissions > 0 ? round(($graded_submissions / $total_
                                     Classroom
                                 </th>
                                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Posted Date
+                                    Deadline
+                                </th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    Status
                                 </th>
                                 <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Actions
@@ -176,7 +179,13 @@ $completion_rate = $total_submissions > 0 ? round(($graded_submissions / $total_
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
                             <?php foreach ($pending_assignments as $index => $assignment): ?>
-                                <tr class="hover:bg-gray-50 transition-colors duration-200 animate__animated animate__fadeIn" style="animation-delay: <?php echo 0.4 + ($index * 0.05); ?>s;">
+                                <?php
+                                $now = new DateTime();
+                                $deadline = $assignment['deadline'] ? new DateTime($assignment['deadline']) : null;
+                                $is_overdue = $deadline && $now > $deadline;
+                                $time_left = $deadline ? $deadline->diff($now) : null;
+                                ?>
+                                <tr class="hover:bg-gray-50 transition-colors duration-200 animate__animated animate__fadeIn <?php echo $is_overdue ? 'bg-red-50' : ''; ?>" style="animation-delay: <?php echo 0.4 + ($index * 0.05); ?>s;">
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="text-sm font-medium text-gray-900">
                                             <?php echo htmlspecialchars($assignment['title']); ?>
@@ -188,17 +197,58 @@ $completion_rate = $total_submissions > 0 ? round(($graded_submissions / $total_
                                         </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-500">
-                                            <?php echo date('M d, Y', strtotime($assignment['created_at'])); ?>
-                                        </div>
+                                        <?php if ($assignment['deadline']): ?>
+                                            <div class="text-sm <?php echo $is_overdue ? 'text-red-600' : 'text-gray-500'; ?>">
+                                                <?php echo date('M d, Y H:i', strtotime($assignment['deadline'])); ?>
+                                                <?php if ($time_left && !$is_overdue): ?>
+                                                    <div class="text-xs text-gray-400">
+                                                        <?php 
+                                                        if ($time_left->days > 0) {
+                                                            echo $time_left->days . ' days left';
+                                                        } elseif ($time_left->h > 0) {
+                                                            echo $time_left->h . ' hours left';
+                                                        } else {
+                                                            echo $time_left->i . ' minutes left';
+                                                        }
+                                                        ?>
+                                                    </div>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php else: ?>
+                                            <span class="text-gray-400 text-sm">No deadline</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <?php if ($is_overdue): ?>
+                                            <span class="bg-red-100 text-red-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                                                OVERDUE
+                                            </span>
+                                        <?php elseif ($deadline && $time_left && $time_left->days <= 1): ?>
+                                            <span class="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                                                DUE SOON
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                                                ACTIVE
+                                            </span>
+                                        <?php endif; ?>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                        <a href="submit_assignment.php?lesson_id=<?php echo $assignment['id']; ?>" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md text-sm inline-flex items-center transition-colors duration-200">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                                            </svg>
-                                            Submit
-                                        </a>
+                                        <?php if (!$is_overdue): ?>
+                                            <a href="submit_assignment.php?lesson_id=<?php echo $assignment['id']; ?>" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-md text-sm inline-flex items-center transition-colors duration-200">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                                </svg>
+                                                Submit
+                                            </a>
+                                        <?php else: ?>
+                                            <span class="bg-gray-400 text-white px-3 py-1 rounded-md text-sm inline-flex items-center">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                                Overdue
+                                            </span>
+                                        <?php endif; ?>
                                         <a href="view_lesson.php?id=<?php echo $assignment['id']; ?>" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded-md text-sm inline-flex items-center ml-2 transition-colors duration-200">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />

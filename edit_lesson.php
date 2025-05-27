@@ -53,6 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $title = clean_input($_POST['title']);
     $description = clean_input($_POST['description']);
     $content = isset($_POST['content']) ? $_POST['content'] : '';
+    $deadline = !empty($_POST['deadline']) ? clean_input($_POST['deadline']) : null;
     
     $errors = [];
     
@@ -70,6 +71,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $check_file_path = $conn->query("SHOW COLUMNS FROM lessons LIKE 'file_path'");
         $file_path_exists = ($check_file_path->num_rows > 0);
         
+        $check_deadline = $conn->query("SHOW COLUMNS FROM lessons LIKE 'deadline'");
+        $deadline_exists = ($check_deadline->num_rows > 0);
+        
         // Add missing columns if needed
         if (!$content_exists) {
             $conn->query("ALTER TABLE lessons ADD COLUMN content TEXT AFTER description");
@@ -79,6 +83,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$file_path_exists) {
             $conn->query("ALTER TABLE lessons ADD COLUMN file_path VARCHAR(255) AFTER content");
             $file_path_exists = true;
+        }
+        
+        if (!$deadline_exists) {
+            $conn->query("ALTER TABLE lessons ADD COLUMN deadline DATETIME NULL AFTER content");
+            $deadline_exists = true;
+        }
+        
+        // Check if updated_at column exists and add it if missing
+        $check_updated_at = $conn->query("SHOW COLUMNS FROM lessons LIKE 'updated_at'");
+        $updated_at_exists = ($check_updated_at->num_rows > 0);
+        
+        if (!$updated_at_exists) {
+            $conn->query("ALTER TABLE lessons ADD COLUMN updated_at DATETIME NULL");
+            $updated_at_exists = true;
         }
         
         // Handle file upload if present
@@ -120,15 +138,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         if (empty($errors)) {
-            // Update the lesson
-            if ($content_exists && $file_path_exists) {
-                $stmt = $conn->prepare("UPDATE lessons SET title = ?, description = ?, content = ?, file_path = ?, updated_at = NOW() WHERE id = ?");
-                $stmt->bind_param("ssssi", $title, $description, $content, $file_path, $lesson_id);
-            } elseif ($content_exists) {
+            // Update the lesson with deadline - modify the queries to handle updated_at column
+            if ($content_exists && $file_path_exists && $deadline_exists && $updated_at_exists) {
+                $stmt = $conn->prepare("UPDATE lessons SET title = ?, description = ?, content = ?, deadline = ?, file_path = ?, updated_at = NOW() WHERE id = ?");
+                $stmt->bind_param("sssssi", $title, $description, $content, $deadline, $file_path, $lesson_id);
+            } elseif ($content_exists && $deadline_exists && $updated_at_exists) {
+                $stmt = $conn->prepare("UPDATE lessons SET title = ?, description = ?, content = ?, deadline = ?, updated_at = NOW() WHERE id = ?");
+                $stmt->bind_param("ssssi", $title, $description, $content, $deadline, $lesson_id);
+            } elseif ($content_exists && $file_path_exists && $deadline_exists) {
+                $stmt = $conn->prepare("UPDATE lessons SET title = ?, description = ?, content = ?, deadline = ?, file_path = ? WHERE id = ?");
+                $stmt->bind_param("sssssi", $title, $description, $content, $deadline, $file_path, $lesson_id);
+            } elseif ($content_exists && $deadline_exists) {
+                $stmt = $conn->prepare("UPDATE lessons SET title = ?, description = ?, content = ?, deadline = ? WHERE id = ?");
+                $stmt->bind_param("ssssi", $title, $description, $content, $deadline, $lesson_id);
+            } elseif ($content_exists && $updated_at_exists) {
                 $stmt = $conn->prepare("UPDATE lessons SET title = ?, description = ?, content = ?, updated_at = NOW() WHERE id = ?");
                 $stmt->bind_param("sssi", $title, $description, $content, $lesson_id);
-            } else {
+            } elseif ($content_exists) {
+                $stmt = $conn->prepare("UPDATE lessons SET title = ?, description = ?, content = ? WHERE id = ?");
+                $stmt->bind_param("sssi", $title, $description, $content, $lesson_id);
+            } elseif ($updated_at_exists) {
                 $stmt = $conn->prepare("UPDATE lessons SET title = ?, description = ?, updated_at = NOW() WHERE id = ?");
+                $stmt->bind_param("ssi", $title, $description, $lesson_id);
+            } else {
+                $stmt = $conn->prepare("UPDATE lessons SET title = ?, description = ? WHERE id = ?");
                 $stmt->bind_param("ssi", $title, $description, $lesson_id);
             }
             
@@ -184,6 +217,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <textarea id="content" name="content" rows="10" 
                       class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition-all duration-300"><?php echo htmlspecialchars($lesson['content'] ?? ''); ?></textarea>
             <p class="text-sm text-gray-500 mt-1">The main content of your lesson. You can include detailed instructions, explanations, and assignment details.</p>
+        </div>
+        
+        <!-- Add deadline field -->
+        <div class="mb-4">
+            <label for="deadline" class="block text-gray-700 font-medium mb-2">
+                Submission Deadline
+                <span class="text-gray-500 font-normal">(Optional)</span>
+            </label>
+            <input type="datetime-local" id="deadline" name="deadline" 
+                   value="<?php echo isset($lesson['deadline']) && $lesson['deadline'] ? date('Y-m-d\TH:i', strtotime($lesson['deadline'])) : ''; ?>"
+                   class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition-all duration-300">
+            <p class="text-sm text-gray-500 mt-1">Set a deadline for student submissions. Leave empty for no deadline.</p>
+            
+            <?php if (isset($lesson['deadline']) && $lesson['deadline']): ?>
+                <?php
+                $now = new DateTime();
+                $deadline = new DateTime($lesson['deadline']);
+                $is_overdue = $now > $deadline;
+                $time_diff = $deadline->diff($now);
+                ?>
+                <div class="mt-2 p-2 rounded-md <?php echo $is_overdue ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'; ?>">
+                    <div class="flex items-center text-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span class="font-medium">Current deadline: </span>
+                        <span class="ml-1"><?php echo $deadline->format('M d, Y H:i'); ?></span>
+                        <?php if ($is_overdue): ?>
+                            <span class="ml-2 bg-red-200 text-red-800 px-2 py-1 rounded-full text-xs font-semibold">OVERDUE</span>
+                        <?php elseif ($time_diff->days <= 1): ?>
+                            <span class="ml-2 bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full text-xs font-semibold">DUE SOON</span>
+                        <?php else: ?>
+                            <span class="ml-2 bg-green-200 text-green-800 px-2 py-1 rounded-full text-xs font-semibold">ACTIVE</span>
+                        <?php endif; ?>
+                    </div>
+                    <?php if (!$is_overdue): ?>
+                        <div class="text-xs mt-1">
+                            Time remaining: 
+                            <?php 
+                            if ($time_diff->days > 0) {
+                                echo $time_diff->days . ' days';
+                            } elseif ($time_diff->h > 0) {
+                                echo $time_diff->h . ' hours';
+                            } else {
+                                echo $time_diff->i . ' minutes';
+                            }
+                            ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
         </div>
         
         <div class="mb-6">

@@ -19,16 +19,10 @@ if (!isset($_GET['lesson_id']) || !is_numeric($_GET['lesson_id'])) {
     redirect("index.php");
 }
 
-$lesson_id = $_GET['lesson_id'];
-$user_id = $_SESSION['user_id'];
+$lesson_id = clean_input($_GET['lesson_id']);
 
-// Get lesson details with classroom info
-$stmt = $conn->prepare("
-    SELECT l.*, c.name as classroom_name, c.id as classroom_id 
-    FROM lessons l
-    JOIN classrooms c ON l.classroom_id = c.id
-    WHERE l.id = ?
-");
+// Get lesson details including deadline
+$stmt = $conn->prepare("SELECT *, deadline FROM lessons WHERE id = ?");
 $stmt->bind_param("i", $lesson_id);
 $stmt->execute();
 $result = $stmt->get_result();

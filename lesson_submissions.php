@@ -107,12 +107,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submission_id'], $_PO
                 </svg>
                 Classroom: <?php echo htmlspecialchars($lesson['classroom_name']); ?>
             </span>
-            <span class="inline-block">
+            <span class="inline-block mr-4">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 Total Submissions: <?php echo count($submissions); ?>
             </span>
+            <?php if ($lesson['deadline']): ?>
+                <span class="inline-block">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Deadline: <?php echo date('M d, Y H:i', strtotime($lesson['deadline'])); ?>
+                    <?php
+                    $now = new DateTime();
+                    $deadline = new DateTime($lesson['deadline']);
+                    $is_overdue = $now > $deadline;
+                    ?>
+                    <?php if ($is_overdue): ?>
+                        <span class="bg-red-500 text-white px-2 py-1 rounded-full text-xs ml-2">OVERDUE</span>
+                    <?php else: ?>
+                        <span class="bg-green-500 text-white px-2 py-1 rounded-full text-xs ml-2">ACTIVE</span>
+                    <?php endif; ?>
+                </span>
+            <?php endif; ?>
         </p>
     </div>
     
